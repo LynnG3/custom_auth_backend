@@ -15,6 +15,7 @@ from drf_spectacular.views import (
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # API документация
     path("api/v1/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
         "api/v1/docs/",
@@ -26,13 +27,21 @@ urlpatterns = [
         SpectacularRedocView.as_view(url_name="schema"),
         name="redoc"
     ),
+    # API endpoints
     path("api/v1/", include([
         path("users/", include("users.urls")),
-        path("permissions/", include("src.app.organizations.urls")),
+        # path("permissions/", include("permissions.urls")),
+        # path("mock/", include("mock_resources.urls")),
     ])),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+]
 
 if settings.DEBUG:
-    import debug_toolbar
+    urlpatterns += static(
+        settings.MEDIA_URL, document_root=settings.MEDIA_ROOT
+    )
+    urlpatterns += static(
+        settings.STATIC_URL, document_root=settings.STATIC_ROOT
+    )
 
+    import debug_toolbar
     urlpatterns += (path('__debug__/', include(debug_toolbar.urls)),)

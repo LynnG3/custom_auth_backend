@@ -32,14 +32,14 @@ A. users - Пользователи (приложение users)
 - password_hash (bcrypt)
 - first_name, last_name
 - is_active, is_verified
-- created_at, updated_at, deleted_at
+- deleted_at
 
 B. roles - Роли (приложение permissions)
 
 - id (PK)
 - name (admin, manager, user, guest)
 - description
-- created_at
+
 
 C. user_roles - Связь пользователей с ролями (приложение permissions)
 
@@ -61,7 +61,6 @@ D. resource_permissions - Права ролей на ресурсы (прило�
 - update_all_permission (boolean)
 - delete_permission (boolean)
 - delete_all_permission (boolean)
-- created_at, updated_at
 
 
 ## Технологии
@@ -103,9 +102,9 @@ DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 
 # Database settings
-DB_NAME=auth_db
-DB_USER=auth_user
-DB_PASSWORD=auth_password
+DB_NAME=postgres_db
+DB_USER=postgres_user
+DB_PASSWORD=postgres_password
 DB_HOST=localhost
 DB_PORT=5432
 
@@ -143,21 +142,6 @@ python manage.py runserver
 ```
 ...
 ```
-
-## Модели данных
-
-### CustomUser
-- `email` - Email (уникальный, используется для входа)
-- `username` - Имя пользователя
-- `role` - Номер телефона
-- `created_at` - Дата создания
-- `updated_at` - Дата обновления
-
-### UserRole
-- `user` - Связь с пользователем (OneToOne)
-
-
-### RolePermission
 
 
 

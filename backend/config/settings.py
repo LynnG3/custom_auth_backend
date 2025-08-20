@@ -44,9 +44,12 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "debug_toolbar",
     "django_redis",
 
     "rest_framework",
+    'rest_framework_simplejwt',
+    'drf_spectacular',
     "corsheaders",
 
     # Local apps
@@ -65,6 +68,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "debug_toolbar.middleware.DebugToolbarMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -94,8 +98,8 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": config('DB_NAME', default='auth_db'),
-        "USER": config('DB_USER', default='auth_user'),
-        "PASSWORD": config('DB_PASSWORD', default='auth_password'),
+        "USER": config('DB_USER', default='postgres'),
+        "PASSWORD": config('DB_PASSWORD', default='postgres'),
         "HOST": config('DB_HOST', default='localhost'),
         "PORT": config('DB_PORT', default='5432'),
     }
@@ -156,8 +160,9 @@ AUTH_USER_MODEL = 'users.CustomUser'
 # Django REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',  # мб не нужно
+        'rest_framework.authentication.TokenAuthentication',  # мб не нужно
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -166,6 +171,7 @@ REST_FRAMEWORK = {
         'rest_framework.pagination.PageNumberPagination'
     ),
     'PAGE_SIZE': 10,
+    "DEFAULT_SCHEMA_CLASS": 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
