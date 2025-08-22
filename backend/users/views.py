@@ -6,8 +6,9 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from django.contrib.auth import authenticate
 from django.utils import timezone
-import jwt as pyjwt
+import jwt
 from django.conf import settings
+from drf_spectacular.utils import extend_schema
 
 from .models import CustomUser
 from .serializers import (
@@ -27,8 +28,10 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         """Установка разрешений в зависимости от действия."""
-        if self.action in ['create', 'register', 'login']:
+        if self.action in ['register', 'login']:
             return [AllowAny()]
+        elif self.action in ['list', 'retrieve']:
+            return [permissions.IsAdminUser()]
         return super().get_permissions()
 
     def get_serializer_class(self):
@@ -39,6 +42,11 @@ class UserViewSet(viewsets.ModelViewSet):
             return UserUpdateSerializer
         return UserSerializer
 
+    @extend_schema(
+        tags=['Authentication'],
+        summary='Регистрация пользователя',
+        description='Создание нового пользователя в системе'
+    )
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):
         """Регистрация пользователя."""
@@ -61,6 +69,11 @@ class UserViewSet(viewsets.ModelViewSet):
         logger.warning(f"Ошибка регистрации: {serializer.errors}")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        tags=['Authentication'],
+        summary='Вход пользователя',
+        description='Аутентификация пользователя по email и паролю'
+    )
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def login(self, request):
         """Вход пользователя в систему."""
@@ -93,6 +106,11 @@ class UserViewSet(viewsets.ModelViewSet):
         logger.warning(f"Ошибка входа: {serializer.errors}")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        tags=['Authentication'],
+        summary='Выход пользователя',
+        description='Выход пользователя из системы'
+    )
     @action(detail=False, methods=['post'])
     def logout(self, request):
         """Выход пользователя из системы."""
@@ -103,6 +121,11 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response({'message': 'Успешный выход из системы'})
 
+    @extend_schema(
+        tags=['Profile Management'],
+        summary='Информация о пользователе',
+        description='Получение данных текущего аутентифицированного пользователя'
+    )
     @action(detail=False, methods=['get'])
     def me(self, request):
         """Получение информации о текущем пользователе."""
@@ -111,6 +134,11 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
 
+    @extend_schema(
+        tags=['Profile Management'],
+        summary='Информация о пользователе',
+        description='Обновление информации о пользователе'
+    )
     @action(detail=False, methods=['put', 'patch'])
     def update_profile(self, request):
         """Обновление профиля пользователя."""
@@ -125,6 +153,11 @@ class UserViewSet(viewsets.ModelViewSet):
         logger.warning(f"Ошибка обновления профиля: {serializer.errors}")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        tags=['Profile Management'],
+        summary='Информация о пользователе',
+        description='Обновление пароля пользователя'
+    )
     @action(detail=False, methods=['post'])
     def change_password(self, request):
         """Смена пароля пользователя."""
@@ -142,6 +175,11 @@ class UserViewSet(viewsets.ModelViewSet):
         logger.warning(f"Ошибка смены пароля: {serializer.errors}")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        tags=['Account Management'],
+        summary='Информация о пользователе',
+        description='Мягкое удаление аккаунта пользователя'
+    )
     @action(detail=False, methods=['post'])
     def delete_account(self, request):
         """Мягкое удаление аккаунта."""
@@ -163,5 +201,5 @@ class UserViewSet(viewsets.ModelViewSet):
         }
 
         # Временно используем SECRET_KEY, позже вынесем в переменные окружения
-        token = pyjwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+        token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
         return token
