@@ -6,9 +6,10 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from django.contrib.auth import authenticate
 from django.utils import timezone
-import jwt
 from django.conf import settings
+from django.core.cache import cache
 from drf_spectacular.utils import extend_schema
+import jwt
 
 from .models import CustomUser
 from .serializers import (
@@ -43,7 +44,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
 
     @extend_schema(
-        tags=['Authentication'],
+        tags=['authentication'],
         summary='Регистрация пользователя',
         description='Создание нового пользователя в системе'
     )
@@ -70,7 +71,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
-        tags=['Authentication'],
+        tags=['authentication'],
         summary='Вход пользователя',
         description='Аутентификация пользователя по email и паролю'
     )
@@ -107,7 +108,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
-        tags=['Authentication'],
+        tags=['authentication'],
         summary='Выход пользователя',
         description='Выход пользователя из системы'
     )
@@ -116,13 +117,23 @@ class UserViewSet(viewsets.ModelViewSet):
         """Выход пользователя из системы."""
         logger.info(f"Пользователь вышел из системы: {request.user.email}")
 
-        # В JWT системе logout обычно происходит на клиенте
-        # Здесь можно добавить логику для blacklist токенов если нужно
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        if auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
 
-        return Response({'message': 'Успешный выход из системы'})
+            # Добавляем токен в черный список (кэш)
+            cache.set(f'revoked_token_{token}', True, timeout=86400)  # 24 часа
+
+            logger.info(f"Пользователь вышел из системы: {request.user.email}")
+            return Response({'message': 'Успешный выход из системы'})
+
+        return Response(
+            {'error': 'Токен не найден'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     @extend_schema(
-        tags=['Profile Management'],
+        tags=['profile management'],
         summary='Информация о пользователе',
         description='Получение данных текущего аутентифицированного пользователя'
     )
@@ -135,7 +146,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @extend_schema(
-        tags=['Profile Management'],
+        tags=['profile management'],
         summary='Информация о пользователе',
         description='Обновление информации о пользователе'
     )
@@ -176,7 +187,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
-        tags=['Account Management'],
+        tags=['account management'],
         summary='Информация о пользователе',
         description='Мягкое удаление аккаунта пользователя'
     )

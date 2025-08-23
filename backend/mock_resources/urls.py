@@ -1,3 +1,12 @@
-from django.test import TestCase
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import ResourceViewSet
 
-# Create your tests here.
+app_name = 'resources'
+
+router = DefaultRouter()
+router.register(r'resources', ResourceViewSet, basename='resource')
+
+urlpatterns = [
+    path('', include(router.urls)),
+]

@@ -30,8 +30,8 @@ urlpatterns = [
     # API endpoints
     path("api/v1/", include([
         path("users/", include("users.urls")),
-        # path("permissions/", include("permissions.urls")),
-        # path("mock/", include("mock_resources.urls")),
+        path("permissions/", include("permissions.urls")),
+        path("resources/", include("mock_resources.urls")),
     ])),
 ]
 
