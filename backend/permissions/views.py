@@ -2,6 +2,7 @@ import logging
 from rest_framework import viewsets, permissions
 from drf_spectacular.utils import extend_schema
 
+from users.spectacular import CustomJWTAuthenticationScheme
 from .models import Role, UserRole, RolePermission
 from .serializers import (
     RoleSerializer, UserRoleSerializer,

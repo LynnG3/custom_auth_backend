@@ -235,3 +235,34 @@ LOGGING = {
         },
     },
 }
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Custom auth system",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    'SECURITY': [
+        {
+            'Bearer': []
+        }
+    ],
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'http',
+            'scheme': 'bearer',
+            'bearerFormat': 'JWT',
+            'description': 'JWT токен полученный при авторизации'
+        }
+    },
+    "SWAGGER_UI_SETTINGS": {
+        'persistAuthorization': True,
+        'displayRequestDuration': True,
+        "filter": True,
+    },
+    'SERVE_AUTHENTICATION': [
+        'users.authentication.CustomJWTAuthentication',
+    ],
+    'EXTENSIONS': [
+        'users.spectacular.CustomJWTAuthenticationScheme',
+    ],
+    "COMPONENT_SPLIT_REQUEST": True,
+}

@@ -16,6 +16,7 @@ from .serializers import (
     UserRegistrationSerializer, UserLoginSerializer, UserSerializer,
     UserUpdateSerializer, ChangePasswordSerializer
 )
+from .spectacular import CustomJWTAuthenticationScheme
 
 logger = logging.getLogger('auth_system')
 
@@ -165,7 +166,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
-        tags=['Profile Management'],
+        tags=['profile management'],
         summary='Информация о пользователе',
         description='Обновление пароля пользователя'
     )

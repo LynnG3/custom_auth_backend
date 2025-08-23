@@ -2,6 +2,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 
+from users.spectacular import CustomJWTAuthenticationScheme
 from permissions.decorators import (
     require_user_or_higher,
     require_resource_permission
