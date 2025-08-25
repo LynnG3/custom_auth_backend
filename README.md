@@ -1,6 +1,8 @@
-# Custom Authentication Backend
+# Custom Auth Backend
 
-Проект на Django с Django REST Framework и PostgreSQL для аутентификации пользователей.
+Проект на Django с Django REST Framework и PostgreSQL
+для аутентификации и авторизации пользователей
+с кастомной системой родей и разрешений.
 
 ## Архитектура 
 
