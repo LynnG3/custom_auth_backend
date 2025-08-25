@@ -3,10 +3,45 @@ from django.contrib.auth import get_user_model
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from .constants import RESOURCE_TYPES
 from users.models import CustomUser
 
 User = get_user_model()
+
+
+class ResourceType(models.Model):
+    """Типы ресурсов системы - динамически управляемые."""
+
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name='Название ресурса'
+    )
+
+    description = models.TextField(
+        blank=True,
+        verbose_name='Описание ресурса'
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name='Активен'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Дата создания'
+    )
+    
+    class Meta:
+        verbose_name = 'Тип ресурса'
+        verbose_name_plural = 'Типы ресурсов'
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+    
+    def clean(self):
+        """Валидация: название должно быть в нижнем регистре."""
+        if self.name:
+            self.name = self.name.lower()
 
 
 class Role(models.Model):
@@ -98,9 +133,9 @@ class RolePermission(models.Model):
         on_delete=models.CASCADE,
         verbose_name='Роль'
     )
-    resource_type = models.CharField(
-        max_length=20, 
-        choices=RESOURCE_TYPES,
+    resource_type = models.ForeignKey(  # Изменено с CharField на ForeignKey
+        ResourceType,
+        on_delete=models.CASCADE,
         verbose_name='Тип ресурса'
     )
     
@@ -117,10 +152,10 @@ class RolePermission(models.Model):
         verbose_name = 'Разрешение роли'
         verbose_name_plural = 'Разрешения ролей'
         unique_together = ['role', 'resource_type']
-        ordering = ['role__name', 'resource_type']
+        ordering = ['role__name', 'resource_type__name']
     
     def __str__(self):
-        return f"{self.role.name} - {self.resource_type}"
+        return f"{self.role.name} - {self.resource_type.name}"
     
     def clean(self):
         """Валидация: логика наследования прав."""
@@ -164,12 +199,31 @@ def create_default_role_for_user(sender, instance, created, **kwargs):
 def create_default_permissions_for_role(sender, instance, created, **kwargs):
     """Автоматически создает базовые разрешения для новых ролей."""
     if created:
-        # Создаем базовые разрешения для всех типов ресурсов
-        for resource_type, _ in RESOURCE_TYPES:
+        # Создаем базовые разрешения для всех активных типов ресурсов
+        for resource_type in ResourceType.objects.filter(is_active=True):
             # Используем get_or_create чтобы избежать дублирования
             RolePermission.objects.get_or_create(
                 role=instance,
                 resource_type=resource_type,
+                defaults={
+                    'can_read': True,  # Все роли могут читать
+                    'can_create': False,
+                    'can_update': False,
+                    'can_delete': False,
+                    'can_manage_others': False
+                }
+            )
+
+
+@receiver(post_save, sender=ResourceType)
+def create_permissions_for_new_resource(sender, instance, created, **kwargs):
+    """Автоматически создает разрешения для новых типов ресурсов."""
+    if created:
+        # Создаем разрешения для всех существующих ролей
+        for role in Role.objects.all():
+            RolePermission.objects.get_or_create(
+                role=role,
+                resource_type=instance,
                 defaults={
                     'can_read': True,  # Все роли могут читать
                     'can_create': False,

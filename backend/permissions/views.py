@@ -1,111 +1,149 @@
 import logging
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.db import transaction
 from drf_spectacular.utils import extend_schema
 
 from users.spectacular import CustomJWTAuthenticationScheme
-from .models import Role, UserRole, RolePermission
+from .models import Role, UserRole, RolePermission, ResourceType
 from .serializers import (
-    RoleSerializer, UserRoleSerializer,
-    RolePermissionSerializer
+    RoleSerializer, RoleDetailSerializer, UserRoleSerializer,
+    RolePermissionSerializer, RolePermissionDetailSerializer,
+    RolePermissionUpdateSerializer, ResourceTypeSerializer
 )
-from .decorators import require_admin, require_admin_or_manager
+from .decorators import require_admin
+
 
 logger = logging.getLogger('permissions')
 
 
+class ResourceTypeViewSet(viewsets.ModelViewSet):
+    """API для управления типами ресурсов."""
+
+    queryset = ResourceType.objects.filter(is_active=True)
+    serializer_class = ResourceTypeSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Фильтруем только активные ресурсы."""
+        return ResourceType.objects.filter(is_active=True)
+
+    @require_admin()
+    def create(self, request, *args, **kwargs):
+        """Создание нового типа ресурса."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            resource_type = serializer.save()
+
+            # Автоматически создаем разрешения для админа
+            for role in Role.objects.all():
+                RolePermission.objects.update_or_create(
+                    role=role,
+                    resource_type=resource_type,
+                    defaults={
+                        'can_read': True,
+                        'can_create': role.name == 'admin',
+                        'can_update': role.name == 'admin',
+                        'can_delete': role.name == 'admin',
+                        'can_manage_others': role.name == 'admin'
+                    }
+                )
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @require_admin()
+    def update(self, request, *args, **kwargs):
+        """Обновление типа ресурса."""
+        return super().update(request, *args, **kwargs)
+
+    @require_admin()
+    def destroy(self, request, *args, **kwargs):
+        """Мягкое удаление типа ресурса."""
+        resource_type = self.get_object()
+        resource_type.is_active = False
+        resource_type.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'])
+    @require_admin()
+    def activate(self, request, pk=None):
+        """Активация типа ресурса."""
+        resource_type = self.get_object()
+        resource_type.is_active = True
+        resource_type.save()
+        return Response({'status': 'Resource type activated'})
+
+    @action(detail=True, methods=['post'])
+    @require_admin()
+    def deactivate(self, request, pk=None):
+        """Деактивация типа ресурса."""
+        resource_type = self.get_object()
+        resource_type.is_active = False
+        resource_type.save()
+        return Response({'status': 'Resource type deactivated'})
+
+
 class RoleViewSet(viewsets.ModelViewSet):
-    """ViewSet для управления ролями."""
+    """API для управления ролями."""
 
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    @extend_schema(tags=['roles'], summary='Список ролей')
-    @require_admin_or_manager()  # Админы и менеджеры могут читать роли
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return RoleDetailSerializer
+        return RoleSerializer
 
-    @extend_schema(tags=['roles'], summary='Детали роли')
-    @require_admin_or_manager()  # Админы и менеджеры могут читать роли
-    def retrieve(self, request, *args, **kwargs):
-        return super().retrieve(request, *args, **kwargs)
-
-    @extend_schema(tags=['roles'], summary='Создание роли')
-    @require_admin()  # Только админы могут создавать роли
+    @require_admin()
     def create(self, request, *args, **kwargs):
-        try:
-            result = super().create(request, *args, **kwargs)
-            logger.info(f"Role created successfully: {result.data}")
-            return result
-        except Exception as e:
-            logger.error(f"Error creating role: {e}")
-            raise
+        return super().create(request, *args, **kwargs)
 
-    @extend_schema(tags=['roles'], summary='Обновление роли')
-    @require_admin()  # Только админы могут редактировать роли
+    @require_admin()
     def update(self, request, *args, **kwargs):
         return super().update(request, *args, **kwargs)
 
-    @extend_schema(tags=['roles'], summary='Удаление роли')
-    @require_admin()  # Только админы могут удалять роли
+    @require_admin()
     def destroy(self, request, *args, **kwargs):
         return super().destroy(request, *args, **kwargs)
 
 
 class UserRoleViewSet(viewsets.ModelViewSet):
-    """ViewSet для управления ролями пользователей."""
+    """API для управления ролями пользователей."""
 
     queryset = UserRole.objects.all()
     serializer_class = UserRoleSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    @extend_schema(tags=['user-roles'], summary='Список ролей пользователей')
-    def list(self, request, *args, **kwargs):
-        # Все аутентифицированные могут читать роли пользователей
-        return super().list(request, *args, **kwargs)
-
-    @extend_schema(tags=['user-roles'], summary='Детали роли пользователя')
-    def retrieve(self, request, *args, **kwargs):
-        # Все аутентифицированные могут читать роли пользователей
-        return super().retrieve(request, *args, **kwargs)
-
-    @extend_schema(tags=['user-roles'], summary='Назначение роли')
-    @require_admin()  # Только админы могут назначать роли
+    @require_admin()
     def create(self, request, *args, **kwargs):
         return super().create(request, *args, **kwargs)
 
-    @extend_schema(tags=['user-roles'], summary='Обновление роли')
-    @require_admin()  # Только админы могут обновлять роли
+    @require_admin()
     def update(self, request, *args, **kwargs):
         return super().update(request, *args, **kwargs)
 
-    @extend_schema(tags=['user-roles'], summary='Частичное обновление роли')
-    @require_admin()  # Только админы могут обновлять роли
-    def partial_update(self, request, *args, **kwargs):
-        return super().partial_update(request, *args, **kwargs)
-
-    @extend_schema(tags=['user-roles'], summary='Удаление роли')
-    @require_admin()  # Только админы могут удалять роли
+    @require_admin()
     def destroy(self, request, *args, **kwargs):
         return super().destroy(request, *args, **kwargs)
 
 
 class RolePermissionViewSet(viewsets.ModelViewSet):
-    """ViewSet для управления разрешениями ролей."""
+    """API для управления разрешениями ролей."""
 
     queryset = RolePermission.objects.all()
     serializer_class = RolePermissionSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    @extend_schema(tags=['permissions'], summary='Список разрешений')
-    @require_admin_or_manager()  # Админы и менеджеры могут читать
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
-
-    @extend_schema(tags=['permissions'], summary='Детали разрешения')
-    @require_admin_or_manager()  # Админы и менеджеры могут читать
-    def retrieve(self, request, *args, **kwargs):
-        return super().retrieve(request, *args, **kwargs)
+    def get_serializer_class(self):
+        if self.action in ['retrieve', 'list']:
+            return RolePermissionDetailSerializer
+        elif self.action in ['update', 'partial_update']:
+            return RolePermissionUpdateSerializer
+        return RolePermissionSerializer
 
     @extend_schema(tags=['permissions'], summary='Создание разрешения')
     @require_admin()
@@ -126,3 +164,33 @@ class RolePermissionViewSet(viewsets.ModelViewSet):
     @require_admin()
     def destroy(self, request, *args, **kwargs):
         return super().destroy(request, *args, **kwargs)
+
+    @action(detail=False, methods=['get'])
+    def by_role(self, request):
+        """Получение разрешений по роли."""
+        role_id = request.query_params.get('role_id')
+        if not role_id:
+            return Response(
+                {'error': 'role_id parameter is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        role_permissions = RolePermission.objects.filter(role_id=role_id)
+        serializer = self.get_serializer(role_permissions, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def by_resource(self, request):
+        """Получение разрешений по типу ресурса."""
+        resource_type_id = request.query_params.get('resource_type_id')
+        if not resource_type_id:
+            return Response(
+                {'error': 'resource_type_id parameter is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        role_permissions = RolePermission.objects.filter(
+            resource_type_id=resource_type_id
+        )
+        serializer = self.get_serializer(role_permissions, many=True)
+        return Response(serializer.data)

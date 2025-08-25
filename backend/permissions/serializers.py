@@ -1,127 +1,111 @@
 import logging
 from rest_framework import serializers
-from .models import Role, UserRole, RolePermission
+from .models import Role, UserRole, RolePermission, ResourceType
 
 
 logger = logging.getLogger(__name__)
 
 
-class RoleSerializer(serializers.ModelSerializer):
-    """Сериализатор для модели Role."""
-
+class ResourceTypeSerializer(serializers.ModelSerializer):
+    """Сериализатор для типов ресурсов."""
+    
     class Meta:
-        model = Role
-        fields = ['id', 'name', 'description', 'is_default', 'created_at']
+        model = ResourceType
+        fields = [
+            'id', 'name',
+            'description', 'is_active', 'created_at'
+        ]
         read_only_fields = ['id', 'created_at']
 
-    def validate(self, attrs):
-        """Валидация данных."""
-        name = attrs.get('name')
-        if name:
-            # Проверяем, что имя не является зарезервированным
-            reserved_names = ['admin', 'manager', 'user', 'guest']
-            if name in reserved_names:
-                logger.warning(f"Attempted to create reserved role: {name}")
-                raise serializers.ValidationError(
-                    f"Имя '{name}' зарезервировано системой"
-                )
 
-            # Проверяем уникальность
-            if Role.objects.filter(name=name).exists():
-                logger.warning(f"Role with name '{name}' already exists")
-                raise serializers.ValidationError(
-                    f"Роль с именем '{name}' уже существует"
-                )
-
-        return attrs
-
-
-class RoleDetailSerializer(serializers.ModelSerializer):
-    """Сериализатор деталей модели Role."""
-
-    user_count = serializers.SerializerMethodField()
-
+class RoleSerializer(serializers.ModelSerializer):
+    """Сериализатор для ролей."""
+    
     class Meta:
         model = Role
         fields = [
             'id', 'name', 'description',
-            'is_default', 'created_at', 'user_count'
+            'is_default', 'created_at'
         ]
-        read_only_fields = ['id', 'created_at', 'user_count']
+        read_only_fields = ['id', 'created_at']
 
-    def get_user_count(self, obj):
-        """Количество пользователей с этой ролью."""
-        return UserRole.objects.filter(role=obj, is_active=True).count()
+
+class RoleDetailSerializer(RoleSerializer):
+    """Детальный сериализатор для ролей."""
+    
+    permissions = serializers.SerializerMethodField()
+    
+    class Meta(RoleSerializer.Meta):
+        fields = RoleSerializer.Meta.fields + ['permissions']
+    
+    def get_permissions(self, obj):
+        """Получает разрешения роли."""
+        permissions = RolePermission.objects.filter(
+            role=obj
+        ).select_related('resource_type')
+        return RolePermissionSerializer(permissions, many=True).data
 
 
 class UserRoleSerializer(serializers.ModelSerializer):
-    """Сериализатор для модели UserRole."""
+    """Сериализатор для связи пользователей с ролями."""
 
-    class Meta:
-        model = UserRole
-        fields = [
-            'id', 'user', 'role',
-            'assigned_by', 'assigned_at', 'is_active'
-        ]
-        read_only_fields = ['id', 'assigned_at']
-
-
-class UserRoleDetailSerializer(serializers.ModelSerializer):
-    """Детальный сериализатор для модели UserRole."""
-
-    user_email = serializers.CharField(source='user.email', read_only=True)
-    user_full_name = serializers.SerializerMethodField()
     role_name = serializers.CharField(source='role.name', read_only=True)
-    role_description = serializers.CharField(
-        source='role.description', read_only=True
-    )
-    assigned_by_email = serializers.CharField(
-        source='assigned_by.email', read_only=True
-    )
+    user_email = serializers.CharField(source='user.email', read_only=True)
 
     class Meta:
         model = UserRole
         fields = [
-            'id', 'user', 'user_email', 'user_full_name',
-            'role', 'role_name', 'role_description',
-            'assigned_by', 'assigned_by_email', 'assigned_at', 'is_active'
+            'id', 'user', 'role', 'role_name',
+            'user_email', 'assigned_by', 'assigned_at', 'is_active'
         ]
         read_only_fields = ['id', 'assigned_at']
-
-    def get_user_full_name(self, obj):
-        """Полное имя пользователя."""
-        if obj.user.first_name and obj.user.last_name:
-            return f"{obj.user.last_name} {obj.user.first_name}"
-        return obj.user.email
 
 
 class RolePermissionSerializer(serializers.ModelSerializer):
-    """Сериализатор для модели RolePermission."""
+    """Сериализатор для разрешений ролей."""
 
-    role_name = serializers.CharField(source='role.name', read_only=True)
+    resource_type_name = serializers.CharField(
+        source='resource_type.name',
+        read_only=True
+    )
 
     class Meta:
         model = RolePermission
         fields = [
-            'id', 'role', 'role_name', 'resource_type',
+            'id', 'role', 'resource_type', 'resource_type_name',
             'can_create', 'can_read', 'can_update', 'can_delete',
-            'can_manage_others',
-            'created_at'
+            'can_manage_others', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
 
+
+class RolePermissionDetailSerializer(RolePermissionSerializer):
+    """Детальный сериализатор для разрешений ролей."""
+    
+    role_name = serializers.CharField(source='role.name', read_only=True)
+    
+    class Meta(RolePermissionSerializer.Meta):
+        fields = RolePermissionSerializer.Meta.fields + ['role_name']
+
+
+class RolePermissionUpdateSerializer(serializers.ModelSerializer):
+    """Сериализатор для обновления разрешений ролей."""
+
+    class Meta:
+        model = RolePermission
+        fields = [
+            'can_create', 'can_read', 'can_update', 'can_delete',
+            'can_manage_others'
+        ]
+
     def validate(self, attrs):
-        """Валидация данных."""
+        """Валидация логики наследования прав."""
         if attrs.get('can_manage_others'):
-            if not attrs.get('can_read'):
-                raise serializers.ValidationError(
-                    "Если можно управлять чужими ресурсами, "
-                    "то должно быть право на чтение"
-                )
-            if not attrs.get('can_update') and not attrs.get('can_delete'):
-                raise serializers.ValidationError(
-                    "Если можно управлять чужими ресурсами, "
-                    "то должны быть права на обновление или удаление"
-                )
+            # Если можно управлять чужими, то должны быть базовые права
+            if not attrs.get('can_read', False):
+                attrs['can_read'] = True
+            if not attrs.get('can_update', False) and not data.get('can_delete', False):
+                # Должно быть хотя бы одно право на управление
+                attrs['can_update'] = True
 
         return attrs
