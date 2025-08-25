@@ -55,7 +55,8 @@ INSTALLED_APPS = [
     # Local apps
     "users",
     "permissions",
-    "mock_resources"
+    "mock_resources",
+    'management'
 ]
 
 MIDDLEWARE = [

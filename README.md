@@ -138,6 +138,27 @@ docker compose logs
 - **Админка Django**: http://localhost:8000/admin/
 - **API endpoints**: http://localhost:8000/api/v1/
 
+#### Загрузка тестовых данных
+
+Для демонстрации работы системы создайте набор тестовых данных:
+
+```bash
+# Выполнить в контейнере
+docker compose exec web python manage.py create_test_data
+```
+
+**Что создается:**
+- **Пользователи**: admin@example.com, manager@example.com, user@example.com
+- **Роли**: admin, manager, user, guest
+- **Типы ресурсов**: product, order
+- **Моковые ресурсы**: тестовый продукт и заказ
+- **Разрешения**: настроены согласно бизнес-логике
+
+**Логины для тестирования:**
+- `admin@example.com` / `AdminPass123!` - полный доступ
+- `manager@example.com` / `ManagerPass123!` - создание и редактирование
+- `user@example.com` / `UserPass123!` - чтение и управление заказами
+
 ## Тестирование
 
 ### Запуск тестов в контейнере
@@ -146,8 +167,6 @@ docker compose logs
 docker compose exec web python -m pytest
 # С подробным выводом
 docker-compose exec web python -m pytest -v
-# С покрытием
-docker-compose exec web python -m pytest --cov=. --cov-report=html
 ```
 
 ### Запуск тестов локально
