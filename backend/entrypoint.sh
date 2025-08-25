@@ -1,8 +1,6 @@
 #!/bin/sh
-
 set -e
 
-# Ждем, пока база данных будет доступна
 echo "Waiting for database..."
 sleep 5
 

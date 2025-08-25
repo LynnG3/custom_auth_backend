@@ -44,13 +44,19 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "debug_toolbar",
+    "django_redis",
 
     "rest_framework",
+    # 'rest_framework_simplejwt',
+    'drf_spectacular',
     "corsheaders",
 
     # Local apps
     "users",
-    "permissions"
+    "permissions",
+    "mock_resources",
+    'management'
 ]
 
 MIDDLEWARE = [
@@ -63,6 +69,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "debug_toolbar.middleware.DebugToolbarMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -92,8 +99,8 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": config('DB_NAME', default='auth_db'),
-        "USER": config('DB_USER', default='auth_user'),
-        "PASSWORD": config('DB_PASSWORD', default='auth_password'),
+        "USER": config('DB_USER', default='postgres'),
+        "PASSWORD": config('DB_PASSWORD', default='postgres'),
         "HOST": config('DB_HOST', default='localhost'),
         "PORT": config('DB_PORT', default='5432'),
     }
@@ -154,8 +161,8 @@ AUTH_USER_MODEL = 'users.CustomUser'
 # Django REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.TokenAuthentication',
+        'users.authentication.CustomJWTAuthentication',
+        # 'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -164,6 +171,7 @@ REST_FRAMEWORK = {
         'rest_framework.pagination.PageNumberPagination'
     ),
     'PAGE_SIZE': 10,
+    "DEFAULT_SCHEMA_CLASS": 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
@@ -180,3 +188,82 @@ CORS_ALLOW_CREDENTIALS = True
 # Additional CORS settings for development
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
+
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': 'django.log',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'auth_system': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'permissions': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Custom auth system",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    'SECURITY': [
+        {
+            'Bearer': []
+        }
+    ],
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'http',
+            'scheme': 'bearer',
+            'bearerFormat': 'JWT',
+            'description': 'JWT токен полученный при авторизации'
+        }
+    },
+    "SWAGGER_UI_SETTINGS": {
+        'persistAuthorization': True,
+        'displayRequestDuration': True,
+        "filter": True,
+    },
+    'SERVE_AUTHENTICATION': [
+        'users.authentication.CustomJWTAuthentication',
+    ],
+    'EXTENSIONS': [
+        'users.spectacular.CustomJWTAuthenticationScheme',
+    ],
+    "COMPONENT_SPLIT_REQUEST": True,
+}

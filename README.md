@@ -17,59 +17,73 @@
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │  Аутентификация │    │    Авторизация   │    │  Бизнес-логика  │
 │                 │    │                  │    │                 │
-│ - JWT токены    │───▶│ - Проверка прав  │───▶│ - Mock Views    │
+│ - JWT токены    │───▶│ - RBAC система   │───▶│ - Mock Views    │
 │ - bcrypt        │    │ - Middleware     │    │ - Ресурсы       │
-│ - Middleware    │    │ - Декораторы     │    │ - Валидация     │
+│ - Custom Auth   │    │ - Декораторы     │    │ - Валидация     │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
 ## Схема базы данных
 
-A. users - Пользователи (приложение users)
+### A. users - Пользователи (приложение users)
+- `id` (PK)
+- `email` (unique)
+- `password_hash` (bcrypt)
+- `first_name`, `last_name`
+- `is_active`, `is_verified`
+- `deleted_at` (soft delete)
 
-- id (PK)
-- email (unique)
-- password_hash (bcrypt)
-- first_name, last_name
-- is_active, is_verified
-- created_at, updated_at, deleted_at
+### B. roles - Роли (приложение permissions)
+- `id` (PK)
+- `name` (admin, manager, user, guest)
+- `description`
+- `is_default`
+- `created_at`
 
-B. roles - Роли (приложение permissions)
+### C. user_roles - Связь пользователей с ролями
+- `id` (PK)
+- `user_id` (FK -> users.id)
+- `role_id` (FK -> roles.id)
+- `assigned_by`, `assigned_at`
+- `is_active`
 
-- id (PK)
-- name (admin, manager, user, guest)
-- description
-- created_at
+### D. role_permissions - Права ролей на ресурсы
+- `id` (PK)
+- `role_id` (FK -> roles.id)
+- `resource_type` (product, order, user)
+- `can_create`, `can_read`, `can_update`, `can_delete`
+- `can_manage_others` (управление чужими ресурсами)
 
-C. user_roles - Связь пользователей с ролями (приложение permissions)
+### E. resources - Ресурсы системы (приложение mock_resources)
+- `id` (PK)
+- `name`, `resource_type`
+- `owner` (FK -> users.id)
+- `created_at`, `updated_at`
 
-- id (PK)
-- user_id (FK -> users.id)
-- role_id (FK -> roles.id)
-- assigned_by, assigned_at
+## Система ролей и разрешений
 
-D. resource_permissions - Права ролей на ресурсы (приложение permissions)
+### Роли:
+- **`admin`** - полный доступ ко всем функциям
+- **`manager`** - чтение всех данных, управление своими ресурсами
+- **`user`** - чтение продуктов, управление своими заказами
+- **`guest`** - только чтение продуктов (неаутентифицированные)
+- предполагается возможность добавлять роли
 
-- id (PK)
-- role_id (FK -> roles.id)
-- resource_name (string - 'users', 'products', 'orders')
-- resource_type (string - 'module', 'object')
-- read_permission (boolean)
-- read_all_permission (boolean)
-- create_permission (boolean)
-- update_permission (boolean)
-- update_all_permission (boolean)
-- delete_permission (boolean)
-- delete_all_permission (boolean)
-- created_at, updated_at
-
+### Логика доступа:
+- **Роли**: чтение - админы и менеджеры, создание/добавление/удаление - только админы
+- **Роли пользователей**: чтение - все аутентифицированные, создание/добавление/удаление - только админы
+- **Разрешения**: чтение - админы и менеджеры, создание/добавление/удаление - только админы
+- **Ресурсы**: создание/изменение/удаление - по правам роли и владельца
 
 ## Технологии
 
 - **Backend**: Django 5.2.5
 - **API**: Django REST Framework 3.16.1
 - **База данных**: PostgreSQL 15
-- **Аутентификация**: 
+- **Кэширование**: Redis 7
+- **Аутентификация**: JWT (PyJWT), bcrypt
+- **Документация API**: drf-spectacular
+- **Тестирование**: pytest, pytest-django, faker
 - **Контейнеризация**: Docker & Docker Compose
 
 ## Установка и запуск
@@ -80,21 +94,7 @@ git clone <repository-url>
 cd custom_auth_backend
 ```
 
-### 2. Создание виртуального окружения
-```bash
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# или
-.venv\Scripts\activate  # Windows
-```
-
-### 3. Установка зависимостей
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-### 4. Настройка переменных окружения
+### 2. Настройка переменных окружения
 Создайте файл `.env` в папке `backend/`:
 ```env
 # Django settings
@@ -103,92 +103,117 @@ DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 
 # Database settings
-DB_NAME=auth_db
-DB_USER=auth_user
-DB_PASSWORD=auth_password
+DB_NAME=postgres_db
+DB_USER=postgres_user
+DB_PASSWORD=postgres_password
 DB_HOST=localhost
 DB_PORT=5432
+
+# Redis settings
+REDIS_HOST=redis
+REDIS_PORT=6379
 
 # CORS settings
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ```
 
-### 5. Запуск PostgreSQL
+### 3. Запуск в Docker (рекомендуется)
 ```bash
-docker-compose up -d
+# Запуск всех сервисов
+docker compose up --buld -d
+
+# Проверка статуса
+docker compose ps
+
+# Просмотр логов
+docker compose logs
+
+# суперпользователь создается автоматически
+# при запуске c помощью entrypoint.sh, если еще не создан
 ```
 
-### 6. Применение миграций
+
+### 5. Проверка работы
+- **API документация**: http://localhost:8000/api/v1/docs/
+- **Админка Django**: http://localhost:8000/admin/
+- **API endpoints**: http://localhost:8000/api/v1/
+
+#### Загрузка тестовых данных
+
+Для демонстрации работы системы создайте набор тестовых данных:
+
 ```bash
-python manage.py makemigrations
-python manage.py migrate
+# Выполнить в контейнере
+docker compose exec web python manage.py create_test_data
 ```
 
-### 7. Создание суперпользователя
+**Что создается:**
+- **Пользователи**: admin@example.com, manager@example.com, user@example.com
+- **Роли**: admin, manager, user, guest
+- **Типы ресурсов**: product, order
+- **Моковые ресурсы**: тестовый продукт и заказ
+- **Разрешения**: настроены согласно бизнес-логике
+
+**Логины для тестирования:**
+- `admin@example.com` / `AdminPass123!` - полный доступ
+- `manager@example.com` / `ManagerPass123!` - создание и редактирование
+- `user@example.com` / `UserPass123!` - чтение и управление заказами
+
+## Тестирование
+
+### Запуск тестов в контейнере
 ```bash
-python manage.py createsuperuser
+# Все тесты
+docker compose exec web python -m pytest
+# С подробным выводом
+docker-compose exec web python -m pytest -v
 ```
 
-### 8. Запуск сервера
+### Запуск тестов локально
 ```bash
-python manage.py runserver
+cd backend
+python -m pytest
 ```
 
 ## API Endpoints
 
-...
-
-## Структура проекта
-
 ```
-...
+### Аутентификация (`/api/v1/auth/`)
+- `POST /auth/register/` - регистрация пользователя
+- `POST /auth/login/` - вход в систему
+- `POST /auth/logout/` - выход из системы
+
+### Пользователи (`/api/v1/users/`)
+- `GET /users/me/` - профиль текущего пользователя
+- `PUT /users/update_profile/` - обновление профиля
+- `POST /users/change_password/` - смена пароля
+- `POST /users/delete_account/` - удаление аккаунта
+
+### Роли (`/api/v1/roles/`)
+- `GET /roles/` - список ролей (admin, manager)
+- `POST /roles/` - создание роли (admin)
+- `PUT /roles/{id}/` - обновление роли (admin)
+- `DELETE /roles/{id}/` - удаление роли (admin)
+
+### Роли пользователей (`/api/v1/user-roles/`)
+- `GET /user-roles/` - список назначений ролей (все аутентифицированные)
+- `POST /user-roles/` - назначение роли (admin)
+- `PUT /user-roles/{id}/` - обновление роли (admin)
+- `DELETE /user-roles/{id}/` - удаление роли (admin)
+
+### Разрешения (`/api/v1/permissions/`)
+- `GET /permissions/` - список разрешений (admin, manager)
+- `POST /permissions/` - создание разрешения (admin)
+- `PUT /permissions/{id}/` - обновление разрешения (admin)
+- `DELETE /permissions/{id}/` - удаление разрешения (admin)
+
+### Ресурсы (`/api/v1/resources/`)
+- `GET /resources/` - список ресурсов (все)
+- `POST /resources/` - создание ресурса (user+)
+- `PUT /resources/{id}/` - обновление ресурса (user+, владелец)
+- `DELETE /resources/{id}/` - удаление ресурса (user+, владелец)
 ```
 
-## Модели данных
-
-### CustomUser
-- `email` - Email (уникальный, используется для входа)
-- `username` - Имя пользователя
-- `role` - Номер телефона
-- `created_at` - Дата создания
-- `updated_at` - Дата обновления
-
-### UserRole
-- `user` - Связь с пользователем (OneToOne)
-
-
-### RolePermission
-
-
-
-## Тестирование
-
-```bash
-# Запуск тестов
-python manage.py test
-
-# Запуск тестов с покрытием
-coverage run --source='.' manage.py test
-coverage report
-```
-
-## Развертывание
-
-### Production настройки
-1. Установите `DEBUG=False` в `.env`
-2. Настройте `ALLOWED_HOSTS`
-3. Используйте переменные окружения для секретных ключей
-4. Настройте статические файлы
-5. Используйте HTTPS
-
-### Docker
-```bash
-# Сборка образа
-docker build -t custom-auth-backend .
-
-# Запуск контейнера
-docker run -p 8000:8000 custom-auth-backend
-```
 
 ## Лицензия
 
